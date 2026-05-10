@@ -26,6 +26,11 @@ const DRAFT_SAVE_DELAY = 500; // 500ms防抖延迟
 // 对话文件上传相关（后端会拼接路径与内容发给大模型，前端不再重复发文件列表）
 const MAX_CHAT_FILES = 10;
 const CHAT_FILE_DEFAULT_PROMPT = '请根据上传的文件内容进行分析。';
+/** 与 handler.formatInterruptContinueUserMessage 首段一致；主对话不展示，仅迭代详情（user_interrupt_continue） */
+const CHAT_INTERRUPT_CONTINUE_USER_PREFIX = '【用户补充 / 中断后继续】';
+function isInterruptContinueInjectChatMessage(content) {
+    return typeof content === 'string' && content.trimStart().startsWith(CHAT_INTERRUPT_CONTINUE_USER_PREFIX);
+}
 /**
  * 对话附件：选文件后异步 POST /api/chat-uploads，发送时只传 serverPath（绝对路径），请求体不再内联大文件内容。
  * @type {{ id: number, fileName: string, mimeType: string, serverPath: string|null, uploading: boolean, uploadPercent: number, uploadPromise: Promise<void>|null, uploadError: string|null }[]}
@@ -2259,6 +2264,10 @@ function renderProcessDetails(messageId, processDetails) {
             itemTitle = agPx + '🧑‍⚖️ HITL · ' + hitlMsg;
         } else if (eventType === 'progress') {
             itemTitle = typeof window.translateProgressMessage === 'function' ? window.translateProgressMessage(detail.message || '') : (detail.message || '');
+        } else if (eventType === 'user_interrupt_continue') {
+            itemTitle = typeof window.t === 'function'
+                ? window.t('chat.userInterruptContinueTitle')
+                : '⏸️ 用户中断并继续';
         }
         
         addTimelineItem(timeline, eventType, {
@@ -2975,6 +2984,9 @@ async function loadConversation(conversationId) {
 
             // 渲染单条消息的辅助函数
             const renderOneMessage = (msg) => {
+                if (msg.role === 'user' && isInterruptContinueInjectChatMessage(msg.content)) {
+                    return;
+                }
                 let displayContent = msg.content;
                 if (msg.role === 'assistant' && msg.content === '处理中...' && msg.processDetails && msg.processDetails.length > 0) {
                     for (let i = msg.processDetails.length - 1; i >= 0; i--) {
@@ -6639,6 +6651,9 @@ function formatConversationAsMarkdown(conversation, options = {}) {
     }
 
     messages.forEach((msg, index) => {
+        if (msg && msg.role === 'user' && isInterruptContinueInjectChatMessage(msg.content)) {
+            return;
+        }
         const role = getConversationRoleLabel(msg && msg.role);
         const timestamp = formatConversationDateForMarkdown(msg && msg.createdAt);
         const content = msg && typeof msg.content === 'string' ? msg.content : '';

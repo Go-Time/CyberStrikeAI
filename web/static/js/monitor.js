@@ -784,19 +784,33 @@ function integrateProgressToMCPSection(progressId, assistantMessageId, mcpExecut
         mcpSection.appendChild(buttonsContainer);
     }
 
-    const hasExecBtns = buttonsContainer.querySelector('.mcp-detail-btn:not(.process-detail-btn)');
-    if (mcpIds.length > 0 && !hasExecBtns) {
-        mcpIds.forEach((execId, index) => {
+    let maxExecIndex = 0;
+    const existingExecBtns = buttonsContainer.querySelectorAll('.mcp-detail-btn:not(.process-detail-btn)');
+    existingExecBtns.forEach(function (btn) {
+        const n = parseInt(btn.dataset.execIndex, 10);
+        if (!isNaN(n) && n > maxExecIndex) maxExecIndex = n;
+    });
+    const seenExec = new Set();
+    existingExecBtns.forEach(function (btn) {
+        if (btn.dataset.execId) seenExec.add(String(btn.dataset.execId).trim());
+    });
+    let appendedAny = false;
+    if (mcpIds.length > 0) {
+        mcpIds.forEach(function (execId) {
+            const id = execId != null ? String(execId).trim() : '';
+            if (!id || seenExec.has(id)) return;
+            seenExec.add(id);
+            maxExecIndex += 1;
+            appendedAny = true;
             const detailBtn = document.createElement('button');
             detailBtn.className = 'mcp-detail-btn';
-            detailBtn.dataset.execId = execId;
-            detailBtn.dataset.execIndex = String(index + 1);
-            detailBtn.innerHTML = '<span>' + (typeof window.t === 'function' ? window.t('chat.callNumber', { n: index + 1 }) : '调用 #' + (index + 1)) + '</span>';
-            detailBtn.onclick = () => showMCPDetail(execId);
+            detailBtn.dataset.execId = id;
+            detailBtn.dataset.execIndex = String(maxExecIndex);
+            detailBtn.innerHTML = '<span>' + (typeof window.t === 'function' ? window.t('chat.callNumber', { n: maxExecIndex }) : '调用 #' + maxExecIndex) + '</span>';
+            detailBtn.onclick = function () { showMCPDetail(id); };
             buttonsContainer.appendChild(detailBtn);
         });
-        // 使用批量 API 一次性获取所有工具名称（消除 N 次单独请求）
-        if (typeof batchUpdateButtonToolNames === 'function') {
+        if (appendedAny && typeof batchUpdateButtonToolNames === 'function') {
             batchUpdateButtonToolNames(buttonsContainer, mcpIds);
         }
     }
@@ -1079,6 +1093,24 @@ function resolveStreamTimeline(progressId) {
     return timeline;
 }
 
+/** 去重合并 MCP execution id（顺序：先 prev 后 next），用于多段 Run / 多次 SSE 同一任务。 */
+function mergeMcpExecutionIDLists(prev, next) {
+    const seen = new Set();
+    const out = [];
+    const add = function (arr) {
+        if (!Array.isArray(arr)) return;
+        for (let i = 0; i < arr.length; i++) {
+            const s = arr[i] != null ? String(arr[i]).trim() : '';
+            if (!s || seen.has(s)) continue;
+            seen.add(s);
+            out.push(s);
+        }
+    };
+    add(prev);
+    add(next);
+    return out;
+}
+
 // 处理流式事件
 function handleStreamEvent(event, progressElement, progressId, 
                           getAssistantId, setAssistantId, getMcpIds, setMcpIds) {
@@ -1319,6 +1351,19 @@ function handleStreamEvent(event, progressElement, progressId,
                 data: event.data
             });
             break;
+
+        case 'user_interrupt_continue': {
+            const d = event.data || {};
+            const titleBase = typeof window.t === 'function'
+                ? window.t('chat.userInterruptContinueTitle')
+                : '⏸️ 用户中断并继续';
+            addTimelineItem(timeline, 'user_interrupt_continue', {
+                title: titleBase,
+                message: event.message || '',
+                data: d
+            });
+            break;
+        }
 
         case 'eino_stream_error': {
             const d = event.data || {};
@@ -1672,7 +1717,7 @@ function handleStreamEvent(event, progressElement, progressId,
 
             const responseData = event.data || {};
             const mcpIds = responseData.mcpExecutionIds || [];
-            setMcpIds(mcpIds);
+            setMcpIds(mergeMcpExecutionIDLists(typeof getMcpIds === 'function' ? (getMcpIds() || []) : [], mcpIds));
 
             if (responseData.conversationId) {
                 // 如果用户已经开始了新对话（currentConversationId 为 null），且这个事件来自旧对话，则忽略
@@ -1748,7 +1793,7 @@ function handleStreamEvent(event, progressElement, progressId,
 
             // 先更新 mcp ids
             const responseData = event.data || {};
-            const mcpIds = responseData.mcpExecutionIds || [];
+            const mcpIds = mergeMcpExecutionIDLists(typeof getMcpIds === 'function' ? (getMcpIds() || []) : [], responseData.mcpExecutionIds || []);
             setMcpIds(mcpIds);
 
             // 更新对话ID
@@ -2272,7 +2317,7 @@ async function attachRunningTaskEventStream(conversationId) {
                     if (line.indexOf('data: ') === 0) {
                         try {
                             const eventData = JSON.parse(line.slice(6));
-                            handleStreamEvent(eventData, null, progressId, getAssistantIdFn, setAssistantIdFn, function () { return mcpIds; }, function (ids) { mcpIds = ids; });
+                            handleStreamEvent(eventData, null, progressId, getAssistantIdFn, setAssistantIdFn, function () { return mcpIds; }, function (ids) { mcpIds = mergeMcpExecutionIDLists(mcpIds, ids || []); });
                         } catch (e) {
                             console.error('task-events parse', e);
                         }
@@ -2485,6 +2530,11 @@ function addTimelineItem(timeline, type, options) {
                 ${escapeHtml(options.message || taskCancelledLabel)}
             </div>
         `;
+    } else if (type === 'user_interrupt_continue' && options.message) {
+        const streamBody = typeof formatTimelineStreamBody === 'function'
+            ? formatTimelineStreamBody(options.message, options.data)
+            : options.message;
+        content += `<div class="timeline-item-content">${formatMarkdown(streamBody)}</div>`;
     }
 
     item.innerHTML = content;
@@ -3386,6 +3436,8 @@ function refreshProgressAndTimelineI18n() {
             titleSpan.textContent = ap + '\uD83D\uDCAC ' + _t('chat.einoAgentReplyTitle');
         } else if (type === 'cancelled') {
             titleSpan.textContent = '\u26D4 ' + _t('chat.taskCancelled');
+        } else if (type === 'user_interrupt_continue') {
+            titleSpan.textContent = _t('chat.userInterruptContinueTitle');
         } else if (type === 'progress' && item.dataset.progressMessage !== undefined) {
             titleSpan.textContent = typeof window.translateProgressMessage === 'function' ? window.translateProgressMessage(item.dataset.progressMessage) : item.dataset.progressMessage;
         }

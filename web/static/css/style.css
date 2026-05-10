@@ -3593,6 +3593,11 @@ header {
     background: rgba(255, 112, 67, 0.12);
 }
 
+.timeline-item-user_interrupt_continue {
+    border-left-color: #d97706;
+    background: rgba(217, 119, 6, 0.08);
+}
+
 .timeline-item-header {
     display: flex;
     align-items: center;
