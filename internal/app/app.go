@@ -16,6 +16,7 @@ import (
 	"cyberstrike-ai/internal/c2"
 	"cyberstrike-ai/internal/config"
 	"cyberstrike-ai/internal/database"
+	"cyberstrike-ai/internal/einoobserve"
 	"cyberstrike-ai/internal/handler"
 	"cyberstrike-ai/internal/knowledge"
 	"cyberstrike-ai/internal/logger"
@@ -558,6 +559,10 @@ func (a *App) RunWithContext(ctx context.Context) error {
 
 // Shutdown 关闭应用
 func (a *App) Shutdown() {
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	_ = einoobserve.ShutdownOtel(shutdownCtx)
+	shutdownCancel()
+
 	// 停止钉钉/飞书长连接
 	a.robotMu.Lock()
 	if a.dingCancel != nil {

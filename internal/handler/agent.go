@@ -1249,6 +1249,10 @@ func (h *AgentHandler) createProgressCallback(runCtx context.Context, cancelRun 
 			eventType != "response_start" &&
 			eventType != "response_delta" &&
 			eventType != "tool_result_delta" &&
+			eventType != "eino_trace_run" &&
+			eventType != "eino_trace_start" &&
+			eventType != "eino_trace_end" &&
+			eventType != "eino_trace_error" &&
 			eventType != "eino_agent_reply_stream_start" &&
 			eventType != "eino_agent_reply_stream_delta" &&
 			eventType != "eino_agent_reply_stream_end" {
