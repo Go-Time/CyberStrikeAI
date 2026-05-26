@@ -300,6 +300,6 @@ project:
   enabled: true
   # default_project_id: "" # 可选：机器人/批量任务创建对话时的默认项目 ID
   fact_index_max_runes: 3500
-  fact_summary_max_runes: 120
+  fact_summary_max_runes: 240
   default_inject_deprecated: false
   
