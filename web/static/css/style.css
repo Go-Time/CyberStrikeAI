@@ -21359,6 +21359,11 @@ button.chat-files-dropdown-item:hover:not(:disabled) {
     color: #b45309;
     background: #fffbeb;
 }
+.projects-action-btn--restore:hover {
+    border-color: #86efac;
+    color: #15803d;
+    background: #f0fdf4;
+}
 .projects-action-btn--danger {
     color: #dc2626;
     border-color: #fecaca;

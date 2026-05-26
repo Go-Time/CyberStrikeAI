@@ -286,11 +286,15 @@ function formatConfidenceBadge(confidence) {
     return `<span class="projects-confidence ${cls}">${escapeHtml(label)}</span>`;
 }
 
-function renderProjectFactActions(keyEsc, idEsc) {
+function renderProjectFactActions(keyEsc, idEsc, confidence) {
+    const isDeprecated = (confidence || '').toLowerCase() === 'deprecated';
+    const toggleBtn = isDeprecated
+        ? `<button type="button" class="projects-action-btn projects-action-btn--restore" data-fact-key="${keyEsc}" onclick="restoreProjectFactByKey(this.dataset.factKey)" title="恢复为待确认并重新进入黑板索引">恢复</button>`
+        : `<button type="button" class="projects-action-btn projects-action-btn--mute" data-fact-key="${keyEsc}" onclick="deprecateProjectFactByKey(this.dataset.factKey)" title="标记为已废弃">废弃</button>`;
     return `<div class="projects-table-actions">
         <button type="button" class="projects-action-btn projects-action-btn--edit" data-fact-key="${keyEsc}" onclick="showEditFactModal(this.dataset.factKey)" title="编辑各字段">编辑</button>
         <button type="button" class="projects-action-btn projects-action-btn--view" data-fact-key="${keyEsc}" onclick="viewProjectFactBody(this.dataset.factKey)" title="查看完整 body">详情</button>
-        <button type="button" class="projects-action-btn projects-action-btn--mute" data-fact-key="${keyEsc}" onclick="deprecateProjectFactByKey(this.dataset.factKey)" title="标记为已废弃">废弃</button>
+        ${toggleBtn}
         <button type="button" class="projects-action-btn projects-action-btn--danger" data-fact-id="${idEsc}" onclick="deleteProjectFact(this.dataset.factId)" title="永久删除">删除</button>
     </div>`;
 }
@@ -434,7 +438,7 @@ async function loadProjectFacts() {
             <td>${formatFactBodyBadge(f)}</td>
             <td>${formatConfidenceBadge(f.confidence)}</td>
             <td>${formatProjectTime(f.updated_at, f.created_at)}</td>
-            <td class="col-actions">${renderProjectFactActions(keyEsc, idEsc)}</td>
+            <td class="col-actions">${renderProjectFactActions(keyEsc, idEsc, f.confidence)}</td>
         </tr>`;
     }).join('');
     refreshProjectHeaderStats();
@@ -507,13 +511,27 @@ function closeFactDetailModal() {
 }
 
 async function deprecateProjectFactByKey(factKey) {
-    if (!confirm(`将事实 ${factKey} 标记为 deprecated？`)) return;
+    if (!confirm(`将事实 ${factKey} 标记为已废弃？`)) return;
     const res = await apiFetch(`/api/projects/${currentProjectId}/facts/deprecate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fact_key: factKey }),
     });
     if (!res.ok) return alert('操作失败');
+    loadProjectFacts();
+}
+
+async function restoreProjectFactByKey(factKey) {
+    if (!confirm(`恢复事实 ${factKey}？将重新进入黑板索引（状态：待确认）。`)) return;
+    const res = await apiFetch(`/api/projects/${currentProjectId}/facts/restore`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fact_key: factKey, confidence: 'tentative' }),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        return alert(err.error || '操作失败');
+    }
     loadProjectFacts();
 }
 
@@ -1131,6 +1149,7 @@ window.viewProjectFactBody = viewProjectFactBody;
 window.insertFactBodyTemplate = insertFactBodyTemplate;
 window.updateFactFormHints = updateFactFormHints;
 window.deprecateProjectFactByKey = deprecateProjectFactByKey;
+window.restoreProjectFactByKey = restoreProjectFactByKey;
 window.openVulnerabilitiesForProject = openVulnerabilitiesForProject;
 window.openVulnerabilityDetail = openVulnerabilityDetail;
 window.filterProjectsList = filterProjectsList;
