@@ -872,7 +872,10 @@ async function sendMessage() {
     const displayMessage = hasAttachments
         ? message + '\n' + chatAttachments.map(a => '📎 ' + a.fileName).join('\n')
         : message;
-    addMessage('user', displayMessage);
+    if (window.CyberStrikeChatScroll) {
+        window.CyberStrikeChatScroll.onUserSendMessage();
+    }
+    addMessage('user', displayMessage, null, null, null, { scroll: 'none' });
     
     // 清除防抖定时器，防止在清空输入框后重新保存草稿
     if (draftSaveTimer) {
@@ -930,6 +933,10 @@ async function sendMessage() {
 
     // 创建进度消息容器（使用详细的进度展示）
     const progressId = addProgressMessage();
+    if (window.CyberStrikeChatScroll) {
+        window.CyberStrikeChatScroll.markProgressStreaming(true, progressId);
+        window.CyberStrikeChatScroll.onUserSendMessage();
+    }
     const progressElement = document.getElementById(progressId);
     registerProgressTask(progressId, currentConversationId);
     loadActiveTasks();
@@ -1007,6 +1014,9 @@ async function sendMessage() {
             }
         } finally {
             window.__csAgentLiveStream = { active: false, conversationId: null, progressId: null };
+            if (window.CyberStrikeChatScroll) {
+                window.CyberStrikeChatScroll.onStreamEnd();
+            }
         }
 
         // 消息发送成功后，再次确保草稿被清除
@@ -2149,7 +2159,11 @@ function addMessage(role, content, mcpExecutionIds = null, progressId = null, cr
         messageDiv.setAttribute('data-system-ready-message', '1');
     }
     messagesDiv.appendChild(messageDiv);
-    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    if (window.CyberStrikeChatScroll) {
+        window.CyberStrikeChatScroll.applyMessageScroll(options);
+    } else {
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
     return id;
 }
 
@@ -3296,7 +3310,11 @@ async function loadConversation(conversationId) {
                         if (offset < rest.length) {
                             requestAnimationFrame(renderNextBatch);
                         } else {
-                            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                            if (window.CyberStrikeChatScroll) {
+                                window.CyberStrikeChatScroll.forceScrollToBottom(false);
+                            } else {
+                                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                            }
                             resolve();
                         }
                     };
@@ -3304,7 +3322,11 @@ async function loadConversation(conversationId) {
                 });
             }
 
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            if (window.CyberStrikeChatScroll) {
+                window.CyberStrikeChatScroll.forceScrollToBottom(false);
+            } else {
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            }
             addAttackChainButton(conversationId);
             await pendingMessageBatches;
             if (seq !== loadConversationRequestSeq) {
@@ -3315,8 +3337,12 @@ async function loadConversation(conversationId) {
             }
         } else {
             const readyMsgEmpty = typeof window.t === 'function' ? window.t('chat.systemReadyMessage') : '系统已就绪。请输入您的测试需求，系统将自动执行相应的安全测试。';
-            addMessage('assistant', readyMsgEmpty, null, null, null, { systemReadyMessage: true });
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            addMessage('assistant', readyMsgEmpty, null, null, null, { systemReadyMessage: true, scroll: 'force' });
+            if (window.CyberStrikeChatScroll) {
+                window.CyberStrikeChatScroll.forceScrollToBottom(false);
+            } else {
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            }
             addAttackChainButton(conversationId);
             if (seq !== loadConversationRequestSeq) {
                 return;

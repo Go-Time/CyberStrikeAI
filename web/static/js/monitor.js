@@ -530,23 +530,6 @@ function isConversationTaskRunning(conversationId) {
     return conversationExecutionTracker.isRunning(conversationId);
 }
 
-/** 距底部该像素内视为「跟随底部」；流式输出时仅在此情况下自动滚到底部，避免用户上滑查看历史时被强制拉回 */
-const CHAT_SCROLL_PIN_THRESHOLD_PX = 120;
-
-/** wasPinned 须在 DOM 追加内容之前计算，否则 scrollHeight 变大后会误判 */
-function scrollChatMessagesToBottomIfPinned(wasPinned) {
-    const messagesDiv = document.getElementById('chat-messages');
-    if (!messagesDiv || !wasPinned) return;
-    messagesDiv.scrollTop = messagesDiv.scrollHeight;
-}
-
-function isChatMessagesPinnedToBottom() {
-    const messagesDiv = document.getElementById('chat-messages');
-    if (!messagesDiv) return true;
-    const { scrollTop, scrollHeight, clientHeight } = messagesDiv;
-    return scrollHeight - clientHeight - scrollTop <= CHAT_SCROLL_PIN_THRESHOLD_PX;
-}
-
 /** 顶栏「停止任务」与进度条按钮对齐时，用会话 ID 反查当前页的 progress 块 ID（无则弹窗内仍可按会话取消） */
 function findProgressIdByConversationId(conversationId) {
     if (!conversationId) {
@@ -788,8 +771,16 @@ function addProgressMessage() {
     messageDiv.appendChild(contentWrapper);
     messageDiv.dataset.conversationId = currentConversationId || '';
     messagesDiv.appendChild(messageDiv);
-    messagesDiv.scrollTop = messagesDiv.scrollHeight;
-    
+    bubble.classList.add('is-streaming');
+    const progressWasPinned = typeof window.captureScrollPinState === 'function'
+        ? window.captureScrollPinState()
+        : true;
+    if (typeof window.scrollChatMessagesToBottomIfPinned === 'function') {
+        window.scrollChatMessagesToBottomIfPinned(progressWasPinned);
+    } else if (progressWasPinned) {
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
     return id;
 }
 
@@ -1086,11 +1077,14 @@ function toggleProcessDetails(progressId, assistantMessageId) {
         }
     }
     
-    // 滚动到展开的详情位置，而不是滚动到底部
+    // 滚动到展开的详情位置（流式且用户上滑阅读时不抢主列表滚动）
     if (timeline && timeline.classList.contains('expanded')) {
         setTimeout(() => {
-            // 使用 scrollIntoView 滚动到详情容器位置
-            detailsContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            if (window.CyberStrikeChatScroll && typeof window.CyberStrikeChatScroll.scrollIntoViewIfFollowing === 'function') {
+                window.CyberStrikeChatScroll.scrollIntoViewIfFollowing(detailsContainer, { behavior: 'smooth', block: 'nearest' });
+            } else if (typeof window.captureScrollPinState === 'function' ? window.captureScrollPinState() : true) {
+                detailsContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
         }, 100);
     }
 }
@@ -1177,7 +1171,9 @@ function convertProgressToDetails(progressId, assistantMessageId) {
     
     // 将详情组件插入到助手消息之后
     const messagesDiv = document.getElementById('chat-messages');
-    const insertWasPinned = isChatMessagesPinnedToBottom();
+    const insertWasPinned = typeof window.captureScrollPinState === 'function'
+        ? window.captureScrollPinState()
+        : (typeof window.isChatMessagesPinnedToBottom === 'function' ? window.isChatMessagesPinnedToBottom() : true);
     // assistantElement 是消息div，需要插入到它的下一个兄弟节点之前
     if (assistantElement.nextSibling) {
         messagesDiv.insertBefore(detailsDiv, assistantElement.nextSibling);
@@ -1264,7 +1260,9 @@ function mergeMcpExecutionIDLists(prev, next) {
 // 处理流式事件
 function handleStreamEvent(event, progressElement, progressId, 
                           getAssistantId, setAssistantId, getMcpIds, setMcpIds) {
-    const streamScrollWasPinned = isChatMessagesPinnedToBottom();
+    const streamScrollWasPinned = typeof window.captureScrollPinState === 'function'
+        ? window.captureScrollPinState()
+        : (typeof window.isChatMessagesPinnedToBottom === 'function' ? window.isChatMessagesPinnedToBottom() : true);
 
     // 不依赖进度时间线；在首条 SSE 即可绑定用户消息 ID
     if (event.type === 'message_saved') {
@@ -2277,7 +2275,11 @@ function expandProcessDetailsTimeline(assistantMessageId) {
         btn.innerHTML = '<span>' + collapseT + '</span>';
     });
     setTimeout(function () {
-        detailsContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        if (window.CyberStrikeChatScroll && typeof window.CyberStrikeChatScroll.scrollIntoViewIfFollowing === 'function') {
+            window.CyberStrikeChatScroll.scrollIntoViewIfFollowing(detailsContainer, { behavior: 'smooth', block: 'nearest' });
+        } else if (typeof window.captureScrollPinState === 'function' ? window.captureScrollPinState() : true) {
+            detailsContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
     }, 100);
 }
 
@@ -2463,6 +2465,10 @@ async function attachRunningTaskEventStream(conversationId) {
             const progressId = taskReplayProgressId(conversationId);
             beginCsTaskReplay(progressId, asEl.id, conversationId);
 
+            if (window.CyberStrikeChatScroll && typeof window.CyberStrikeChatScroll.onTaskEventStreamBegin === 'function') {
+                window.CyberStrikeChatScroll.onTaskEventStreamBegin(conversationId, asEl.id, progressId);
+            }
+
             const url = '/api/agent-loop/task-events?conversationId=' + encodeURIComponent(conversationId);
             const response = await apiFetch(url, {
                 method: 'GET',
@@ -2472,6 +2478,9 @@ async function attachRunningTaskEventStream(conversationId) {
                 clearCsTaskReplay();
                 if (progressTaskState.has(progressId)) {
                     progressTaskState.delete(progressId);
+                }
+                if (window.CyberStrikeChatScroll && typeof window.CyberStrikeChatScroll.onTaskEventStreamEnd === 'function') {
+                    window.CyberStrikeChatScroll.onTaskEventStreamEnd();
                 }
                 return false;
             }
@@ -2508,6 +2517,9 @@ async function attachRunningTaskEventStream(conversationId) {
             if (progressTaskState.has(progressId)) {
                 finalizeProgressTask(progressId, typeof window.t === 'function' ? window.t('tasks.statusCompleted') : '已完成');
             }
+            if (window.CyberStrikeChatScroll && typeof window.CyberStrikeChatScroll.onTaskEventStreamEnd === 'function') {
+                window.CyberStrikeChatScroll.onTaskEventStreamEnd();
+            }
             if (typeof loadActiveTasks === 'function') loadActiveTasks();
             if (typeof window.loadConversation === 'function' && window.currentConversationId === conversationId) {
                 await window.loadConversation(conversationId);
@@ -2516,6 +2528,9 @@ async function attachRunningTaskEventStream(conversationId) {
         } catch (e) {
             console.warn('attachRunningTaskEventStream', e);
             clearCsTaskReplay();
+            if (window.CyberStrikeChatScroll && typeof window.CyberStrikeChatScroll.onTaskEventStreamEnd === 'function') {
+                window.CyberStrikeChatScroll.onTaskEventStreamEnd();
+            }
             return false;
         } finally {
             if (taskEventReplayAttachState.inFlightPromise === attachPromise) {

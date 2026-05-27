@@ -1744,6 +1744,7 @@ header {
     background: #f5f7fa;
     overflow: hidden;
     height: 100%;
+    position: relative;
 }
 
 /* 会话顶部栏样式 */
@@ -1770,6 +1771,43 @@ header {
     display: flex;
     flex-direction: column;
     min-height: 0;
+}
+
+.chat-scroll-to-bottom {
+    position: absolute;
+    right: 24px;
+    bottom: 88px;
+    z-index: 20;
+    padding: 8px 14px;
+    border-radius: 20px;
+    border: 1px solid rgba(0, 102, 255, 0.25);
+    background: rgba(255, 255, 255, 0.96);
+    color: var(--accent-color);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    line-height: 1.2;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(8px);
+    transition: opacity 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.chat-scroll-to-bottom.visible {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+}
+
+.chat-scroll-to-bottom:hover {
+    background: #fff;
+    box-shadow: 0 6px 20px rgba(15, 23, 42, 0.16);
+}
+
+.chat-scroll-to-bottom:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 2px;
 }
 
 .message {
@@ -3690,6 +3728,13 @@ header {
 .progress-timeline.expanded {
     max-height: 2000px;
     overflow-y: auto;
+}
+
+/* 流式执行中：取消时间线内层滚动，由 #chat-messages 统一跟随 */
+.progress-container.is-streaming .progress-timeline.expanded,
+.process-details-container.is-streaming .process-details-content .progress-timeline.expanded {
+    max-height: none;
+    overflow: visible;
 }
 
 .timeline-item {
