@@ -72,10 +72,12 @@ type MultiAgentConfig struct {
 	BatchUseMultiAgent     bool   `yaml:"batch_use_multi_agent" json:"batch_use_multi_agent"` // 为 true 时批量任务队列中每子任务走 Eino 多代理
 	// Orchestration 已弃用：保留仅兼容旧版 config.yaml；编排由聊天/WebShell 请求体 orchestration 决定，未传时按 deep。
 	Orchestration string `yaml:"orchestration,omitempty" json:"orchestration,omitempty"`
-	MaxIteration  int    `yaml:"max_iteration" json:"max_iteration"` // 主代理 / 执行器最大推理轮次（Deep、Supervisor、plan_execute 的 Executor）
+	// MaxIteration 已废弃：统一使用 agent.max_iterations（YAML 中保留字段仅为兼容旧配置，运行时不读取）。
+	MaxIteration int `yaml:"max_iteration,omitempty" json:"max_iteration,omitempty"`
 	// PlanExecuteLoopMaxIterations plan_execute 模式下 execute↔replan 外层循环上限；0 表示用 Eino 默认 10。
-	PlanExecuteLoopMaxIterations int    `yaml:"plan_execute_loop_max_iterations,omitempty" json:"plan_execute_loop_max_iterations,omitempty"`
-	SubAgentMaxIterations        int    `yaml:"sub_agent_max_iterations" json:"sub_agent_max_iterations"`
+	PlanExecuteLoopMaxIterations int `yaml:"plan_execute_loop_max_iterations,omitempty" json:"plan_execute_loop_max_iterations,omitempty"`
+	// SubAgentMaxIterations 已废弃：子代理与主代理均使用 agent.max_iterations（Markdown max_iterations>0 可覆盖）。
+	SubAgentMaxIterations int `yaml:"sub_agent_max_iterations,omitempty" json:"sub_agent_max_iterations,omitempty"`
 	WithoutGeneralSubAgent       bool   `yaml:"without_general_sub_agent" json:"without_general_sub_agent"`
 	WithoutWriteTodos            bool   `yaml:"without_write_todos" json:"without_write_todos"`
 	OrchestratorInstruction      string `yaml:"orchestrator_instruction" json:"orchestrator_instruction"`
