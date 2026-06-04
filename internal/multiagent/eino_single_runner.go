@@ -160,13 +160,7 @@ func RunEinoSingleChatModelAgent(
 		handlers = append(handlers, capMw)
 	}
 
-	maxIter := ma.MaxIteration
-	if maxIter <= 0 {
-		maxIter = appCfg.Agent.MaxIterations
-	}
-	if maxIter <= 0 {
-		maxIter = 40
-	}
+	maxIter := agentMaxIterations(appCfg)
 
 	mainToolsCfg := adk.ToolsConfig{
 		ToolsNodeConfig: compose.ToolsNodeConfig{

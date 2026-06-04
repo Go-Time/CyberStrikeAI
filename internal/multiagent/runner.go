@@ -170,18 +170,7 @@ func RunDeepAgent(
 	}
 	reasoning.ApplyToEinoChatModelConfig(baseModelCfg, &appCfg.OpenAI, reasoningClient)
 
-	deepMaxIter := ma.MaxIteration
-	if deepMaxIter <= 0 {
-		deepMaxIter = appCfg.Agent.MaxIterations
-	}
-	if deepMaxIter <= 0 {
-		deepMaxIter = 40
-	}
-
-	subDefaultIter := ma.SubAgentMaxIterations
-	if subDefaultIter <= 0 {
-		subDefaultIter = 20
-	}
+	deepMaxIter := agentMaxIterations(appCfg)
 
 	var subAgents []adk.Agent
 	if orchMode != "plan_execute" {
@@ -230,10 +219,7 @@ func RunDeepAgent(
 				return nil, fmt.Errorf("子代理 %q eino 中间件: %w", id, err)
 			}
 
-			subMax := sub.MaxIterations
-			if subMax <= 0 {
-				subMax = subDefaultIter
-			}
+			subMax := resolveMaxIterations(appCfg, sub.MaxIterations)
 
 			subSumMw, err := newEinoSummarizationMiddleware(ctx, subModel, appCfg, &ma.EinoMiddleware, conversationID, logger)
 			if err != nil {
