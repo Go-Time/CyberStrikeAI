@@ -203,16 +203,6 @@ function getNavSubmenuItems(navItem) {
     return Array.from(submenu.querySelectorAll('.nav-submenu-item'));
 }
 
-/** 仅一个子页时直接进入，避免展开后菜单在侧栏底部不可见 */
-function navigateSingleSubmenuPage(navItem) {
-    const items = getNavSubmenuItems(navItem);
-    if (items.length !== 1) return false;
-    const pageId = items[0].getAttribute('data-page');
-    if (!pageId) return false;
-    switchPage(pageId);
-    return true;
-}
-
 // 切换子菜单
 function toggleSubmenu(menuId) {
     const sidebar = document.getElementById('main-sidebar');
@@ -227,19 +217,6 @@ function toggleSubmenu(menuId) {
         // 折叠状态下显示弹出菜单
         showSubmenuPopup(navItem, menuId);
         return;
-    }
-
-    // 展开侧栏且仅一个子项（角色、Agents 等）：单击进入；已在该页且已展开时再次单击折叠
-    const singleSubItems = getNavSubmenuItems(navItem);
-    if (singleSubItems.length === 1) {
-        const singlePageId = singleSubItems[0].getAttribute('data-page');
-        if (navItem.classList.contains('expanded') && singlePageId === currentPage) {
-            navItem.classList.remove('expanded');
-            return;
-        }
-        if (navigateSingleSubmenuPage(navItem)) {
-            return;
-        }
     }
 
     // 展开状态下切换子菜单，并滚入视口以便看到子项
@@ -270,10 +247,6 @@ function showSubmenuPopup(navItem, menuId) {
         }
     }
 
-    if (navigateSingleSubmenuPage(navItem)) {
-        return;
-    }
-    
     const navItemContent = navItem.querySelector('.nav-item-content');
     const submenu = navItem.querySelector('.nav-submenu');
     
