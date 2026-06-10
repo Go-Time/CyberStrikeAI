@@ -47,6 +47,24 @@ func (l *oneConnListener) Accept() (net.Conn, error) {
 func (l *oneConnListener) Close() error   { return nil }
 func (l *oneConnListener) Addr() net.Addr { return l.addr }
 
+// httpServerForTLSConn 从已有 Server 复制可服务字段，用于已握手 TLS 连接上的 HTTP 服务。
+// 不能复制整个 http.Server（内含 atomic/noCopy 字段）。
+func httpServerForTLSConn(src *http.Server) *http.Server {
+	return &http.Server{
+		Handler:                      src.Handler,
+		DisableGeneralOptionsHandler: src.DisableGeneralOptionsHandler,
+		ReadTimeout:                  src.ReadTimeout,
+		ReadHeaderTimeout:            src.ReadHeaderTimeout,
+		WriteTimeout:                 src.WriteTimeout,
+		IdleTimeout:                  src.IdleTimeout,
+		MaxHeaderBytes:               src.MaxHeaderBytes,
+		ConnState:                    src.ConnState,
+		ErrorLog:                     src.ErrorLog,
+		BaseContext:                  src.BaseContext,
+		ConnContext:                  src.ConnContext,
+	}
+}
+
 func isTLSHandshakeRecord(b byte) bool {
 	return b == 0x16
 }
@@ -172,8 +190,7 @@ func (m *mainServerMux) serveHTTPS(pc *peekedConn, localAddr net.Addr) {
 		}
 	}
 
-	plain := *srv
-	plain.TLSConfig = nil
+	plain := httpServerForTLSConn(srv)
 	ocl := &oneConnListener{conn: tlsConn, addr: localAddr}
 	if err := plain.Serve(ocl); err != nil && !errors.Is(err, net.ErrClosed) && !errors.Is(err, http.ErrServerClosed) {
 		m.logger.Debug("HTTPS 连接处理结束", zap.Error(err))
