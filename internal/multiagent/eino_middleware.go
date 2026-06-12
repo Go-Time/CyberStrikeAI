@@ -51,14 +51,7 @@ func splitToolsForToolSearch(all []tool.BaseTool, alwaysVisible int) (static []t
 }
 
 func splitToolsForToolSearchByNames(all []tool.BaseTool, names []string, fallbackAlwaysVisible int) (static []tool.BaseTool, dynamic []tool.BaseTool, ok bool) {
-	nameSet := make(map[string]struct{}, len(names))
-	for _, n := range names {
-		n = strings.TrimSpace(strings.ToLower(n))
-		if n == "" {
-			continue
-		}
-		nameSet[n] = struct{}{}
-	}
+	nameSet := expandAlwaysVisibleNameSet(names)
 	if len(nameSet) == 0 {
 		return splitToolsForToolSearch(all, fallbackAlwaysVisible)
 	}
@@ -71,9 +64,9 @@ func splitToolsForToolSearchByNames(all []tool.BaseTool, names []string, fallbac
 		info, err := t.Info(context.Background())
 		name := ""
 		if err == nil && info != nil {
-			name = strings.TrimSpace(strings.ToLower(info.Name))
+			name = info.Name
 		}
-		if _, keep := nameSet[name]; keep {
+		if toolMatchesAlwaysVisible(name, nameSet) {
 			static = append(static, t)
 			continue
 		}
