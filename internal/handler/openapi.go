@@ -5030,6 +5030,51 @@ func (h *OpenAPIHandler) GetOpenAPISpec(c *gin.Context) {
 					},
 				},
 			},
+			"/api/config/list-models": map[string]interface{}{
+				"post": map[string]interface{}{
+					"tags":        []string{"配置管理"},
+					"summary":     "获取模型列表",
+					"description": "代理调用 OpenAI 兼容 GET /models，返回可用模型 id 列表。Claude 不支持。",
+					"operationId": "listModels",
+					"requestBody": map[string]interface{}{
+						"required": true,
+						"content": map[string]interface{}{
+							"application/json": map[string]interface{}{
+								"schema": map[string]interface{}{
+									"type":     "object",
+									"required": []string{"api_key"},
+									"properties": map[string]interface{}{
+										"provider": map[string]interface{}{"type": "string", "description": "LLM提供商（openai/claude）", "example": "openai"},
+										"base_url": map[string]interface{}{"type": "string", "description": "API基地址（可选）"},
+										"api_key":  map[string]interface{}{"type": "string", "description": "API密钥"},
+									},
+								},
+							},
+						},
+					},
+					"responses": map[string]interface{}{
+						"200": map[string]interface{}{
+							"description": "获取结果",
+							"content": map[string]interface{}{
+								"application/json": map[string]interface{}{
+									"schema": map[string]interface{}{
+										"type": "object",
+										"properties": map[string]interface{}{
+											"success":   map[string]interface{}{"type": "boolean"},
+											"supported": map[string]interface{}{"type": "boolean"},
+											"error":     map[string]interface{}{"type": "string"},
+											"models":    map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}},
+											"count":     map[string]interface{}{"type": "integer"},
+										},
+									},
+								},
+							},
+						},
+						"400": map[string]interface{}{"description": "参数错误"},
+						"401": map[string]interface{}{"description": "未授权"},
+					},
+				},
+			},
 
 			// ==================== 终端 ====================
 			"/api/terminal/run": map[string]interface{}{

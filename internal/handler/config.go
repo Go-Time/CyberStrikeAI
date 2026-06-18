@@ -1068,6 +1068,80 @@ func (h *ConfigHandler) TestOpenAI(c *gin.Context) {
 	})
 }
 
+// ListModelsRequest 获取模型列表请求（OpenAI 兼容 GET /models）。
+type ListModelsRequest struct {
+	Provider string `json:"provider"`
+	BaseURL  string `json:"base_url"`
+	APIKey   string `json:"api_key"`
+}
+
+// ListModels 代理调用上游 GET /models，返回可用模型 id 列表。
+func (h *ConfigHandler) ListModels(c *gin.Context) {
+	var req ListModelsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的请求参数: " + err.Error()})
+		return
+	}
+
+	provider := strings.TrimSpace(req.Provider)
+	if provider == "" {
+		provider = "openai"
+	}
+	if strings.EqualFold(provider, "claude") {
+		c.JSON(http.StatusOK, gin.H{
+			"success":   false,
+			"supported": false,
+			"error":     "Claude (Anthropic Messages API) 不支持自动获取模型列表，请手动填写",
+		})
+		return
+	}
+
+	if strings.TrimSpace(req.APIKey) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "API Key 不能为空"})
+		return
+	}
+
+	baseURL := strings.TrimSuffix(strings.TrimSpace(req.BaseURL), "/")
+	if baseURL == "" {
+		baseURL = "https://api.openai.com/v1"
+	}
+
+	tmpCfg := &config.OpenAIConfig{
+		Provider: provider,
+		BaseURL:  baseURL,
+		APIKey:   strings.TrimSpace(req.APIKey),
+	}
+	client := openai.NewClient(tmpCfg, nil, h.logger)
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	defer cancel()
+
+	models, err := client.ListModels(ctx)
+	if err != nil {
+		if apiErr, ok := err.(*openai.APIError); ok {
+			c.JSON(http.StatusOK, gin.H{
+				"success":   false,
+				"supported": true,
+				"error":     fmt.Sprintf("API 返回错误 (HTTP %d): %s", apiErr.StatusCode, apiErr.Body),
+			})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"success":   false,
+			"supported": true,
+			"error":     err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":   true,
+		"supported": true,
+		"models":    models,
+		"count":     len(models),
+	})
+}
+
 // TestVisionRequest 测试 Vision 模型连接；vision.api_key/base_url 留空时可传 openai 段作回退。
 type TestVisionRequest struct {
 	Vision config.VisionConfig `json:"vision"`
