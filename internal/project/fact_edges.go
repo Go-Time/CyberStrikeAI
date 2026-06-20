@@ -19,8 +19,39 @@ var PathGraphCategories = map[string]struct{}{
 }
 
 // GraphNodeType 将 fact category 映射为图节点类型（供前端样式与 ELK 分层）。
+// 优先使用 category；仅 synthetic 节点（vuln:）或无 category 时才回退到 fact_key 前缀。
 func GraphNodeType(category, factKey string) string {
 	key := strings.ToLower(strings.TrimSpace(factKey))
+	if strings.HasPrefix(key, "vuln:") {
+		return "vulnerability"
+	}
+	c := strings.ToLower(strings.TrimSpace(category))
+	if c != "" {
+		switch c {
+		case FactCategoryTarget:
+			return "target"
+		case FactCategoryExploit:
+			return "exploit"
+		case FactCategoryPOC:
+			return "poc"
+		case FactCategoryChain:
+			return "chain"
+		case FactCategoryFinding:
+			return "finding"
+		case "vuln":
+			return "vulnerability"
+		case FactCategoryAuth:
+			return "auth"
+		case FactCategoryInfra, FactCategoryBusiness:
+			return "infra"
+		case FactCategoryNote:
+			return "note"
+		case "missing":
+			return "missing"
+		default:
+			return c
+		}
+	}
 	switch {
 	case strings.HasPrefix(key, "target/"):
 		return "target"
@@ -35,25 +66,6 @@ func GraphNodeType(category, factKey string) string {
 	case strings.HasPrefix(key, "auth/"):
 		return "auth"
 	case strings.HasPrefix(key, "infra/"), strings.HasPrefix(key, "business/"):
-		return "infra"
-	case strings.HasPrefix(key, "vuln:"):
-		return "vulnerability"
-	}
-	c := strings.ToLower(strings.TrimSpace(category))
-	switch c {
-	case FactCategoryTarget:
-		return "target"
-	case FactCategoryExploit:
-		return "exploit"
-	case FactCategoryPOC:
-		return "poc"
-	case FactCategoryChain:
-		return "chain"
-	case FactCategoryFinding, "vuln":
-		return "finding"
-	case "auth":
-		return "auth"
-	case "infra", "business":
 		return "infra"
 	default:
 		return "note"
@@ -258,6 +270,9 @@ func isPathGraphFact(category, factKey string) bool {
 	if _, ok := PathGraphCategories[c]; ok {
 		return true
 	}
+	if c != "" {
+		return false
+	}
 	key := strings.ToLower(strings.TrimSpace(factKey))
 	for _, p := range []string{"target/", "finding/", "chain/", "exploit/", "poc/", "evidence/"} {
 		if strings.HasPrefix(key, p) {
@@ -269,8 +284,11 @@ func isPathGraphFact(category, factKey string) bool {
 
 func isDependencyGraphFact(category, factKey string) bool {
 	c := strings.ToLower(strings.TrimSpace(category))
-	if c == "auth" || c == "infra" || c == "business" {
+	if c == FactCategoryAuth || c == FactCategoryInfra || c == FactCategoryBusiness {
 		return true
+	}
+	if c != "" {
+		return false
 	}
 	key := strings.ToLower(strings.TrimSpace(factKey))
 	return strings.HasPrefix(key, "auth/") || strings.HasPrefix(key, "infra/") || strings.HasPrefix(key, "business/")

@@ -102,11 +102,17 @@ func TestGraphNodeType(t *testing.T) {
 	if GraphNodeType("exploit", "exploit/x") != "exploit" {
 		t.Fatal("exploit category")
 	}
-	if GraphNodeType("finding", "evidence/x") != "exploit" {
-		t.Fatal("evidence prefix")
+	if GraphNodeType("finding", "evidence/x") != "finding" {
+		t.Fatal("category should override evidence key prefix")
 	}
-	if GraphNodeType("note", "target/x") != "target" {
-		t.Fatal("target prefix")
+	if GraphNodeType("note", "target/x") != "note" {
+		t.Fatal("category should override target key prefix")
+	}
+	if GraphNodeType("vuln", "finding/x") != "vulnerability" {
+		t.Fatal("vuln category maps to vulnerability node type")
+	}
+	if GraphNodeType("", "target/x") != "target" {
+		t.Fatal("empty category falls back to target key prefix")
 	}
 }
 
