@@ -2464,15 +2464,106 @@ func (h *OpenAPIHandler) GetOpenAPISpec(c *gin.Context) {
 					"parameters": []map[string]interface{}{
 						{"name": "id", "in": "path", "required": true, "schema": map[string]interface{}{"type": "string"}},
 						{"name": "fact_key", "in": "query", "schema": map[string]interface{}{"type": "string"}},
+						{"name": "include_links", "in": "query", "schema": map[string]interface{}{"type": "boolean"}},
+						{"name": "include_link_counts", "in": "query", "schema": map[string]interface{}{"type": "boolean"}},
 					},
-					"responses": map[string]interface{}{"200": map[string]interface{}{"description": "事实列表或单条"}},
+					"responses": map[string]interface{}{"200": map[string]interface{}{"description": "事实列表或单条（可含 link_counts / outgoing_links）"}},
 				},
 				"post": map[string]interface{}{
 					"tags": []string{"项目管理"}, "summary": "创建/更新事实", "operationId": "upsertProjectFactREST",
 					"parameters": []map[string]interface{}{
 						{"name": "id", "in": "path", "required": true, "schema": map[string]interface{}{"type": "string"}},
 					},
+					"requestBody": map[string]interface{}{
+						"required": true,
+						"content": map[string]interface{}{
+							"application/json": map[string]interface{}{
+								"schema": map[string]interface{}{
+									"type": "object",
+									"properties": map[string]interface{}{
+										"fact_key": map[string]interface{}{"type": "string"},
+										"summary":  map[string]interface{}{"type": "string"},
+										"links": map[string]interface{}{
+											"type": "array",
+											"items": map[string]interface{}{
+												"type": "object",
+												"properties": map[string]interface{}{
+													"to":   map[string]interface{}{"type": "string"},
+													"type": map[string]interface{}{"type": "string"},
+												},
+											},
+										},
+										"links_text": map[string]interface{}{"type": "string", "description": "type: fact_key 每行一条"},
+									},
+								},
+							},
+						},
+					},
 					"responses": map[string]interface{}{"200": map[string]interface{}{"description": "成功"}},
+				},
+			},
+			"/api/projects/{id}/fact-graph": map[string]interface{}{
+				"get": map[string]interface{}{
+					"tags": []string{"项目管理"}, "summary": "获取项目事实攻击路径图", "operationId": "getProjectFactGraph",
+					"parameters": []map[string]interface{}{
+						{"name": "id", "in": "path", "required": true, "schema": map[string]interface{}{"type": "string"}},
+						{"name": "view", "in": "query", "schema": map[string]interface{}{"type": "string", "enum": []string{"path", "full"}, "default": "path"}},
+						{"name": "exclude_deprecated", "in": "query", "schema": map[string]interface{}{"type": "boolean", "default": true}},
+					},
+					"responses": map[string]interface{}{"200": map[string]interface{}{"description": "nodes + edges"}},
+				},
+			},
+			"/api/projects/{id}/fact-edges": map[string]interface{}{
+				"get": map[string]interface{}{
+					"tags": []string{"项目管理"}, "summary": "列出项目全部事实边", "operationId": "listProjectFactEdges",
+					"parameters": []map[string]interface{}{
+						{"name": "id", "in": "path", "required": true, "schema": map[string]interface{}{"type": "string"}},
+					},
+					"responses": map[string]interface{}{"200": map[string]interface{}{"description": "边列表"}},
+				},
+				"post": map[string]interface{}{
+					"tags": []string{"项目管理"}, "summary": "添加事实边", "operationId": "createProjectFactEdge",
+					"parameters": []map[string]interface{}{
+						{"name": "id", "in": "path", "required": true, "schema": map[string]interface{}{"type": "string"}},
+					},
+					"requestBody": map[string]interface{}{
+						"required": true,
+						"content": map[string]interface{}{
+							"application/json": map[string]interface{}{
+								"schema": map[string]interface{}{
+									"type": "object",
+									"required": []string{"source_fact_key", "target_fact_key", "edge_type"},
+									"properties": map[string]interface{}{
+										"source_fact_key": map[string]interface{}{"type": "string"},
+										"target_fact_key": map[string]interface{}{"type": "string"},
+										"edge_type":       map[string]interface{}{"type": "string"},
+										"confidence":      map[string]interface{}{"type": "string"},
+									},
+								},
+							},
+						},
+					},
+					"responses": map[string]interface{}{"200": map[string]interface{}{"description": "边已创建"}},
+				},
+			},
+			"/api/projects/{id}/fact-edges/{edgeId}": map[string]interface{}{
+				"delete": map[string]interface{}{
+					"tags": []string{"项目管理"}, "summary": "删除事实边", "operationId": "deleteProjectFactEdge",
+					"parameters": []map[string]interface{}{
+						{"name": "id", "in": "path", "required": true, "schema": map[string]interface{}{"type": "string"}},
+						{"name": "edgeId", "in": "path", "required": true, "schema": map[string]interface{}{"type": "string"}},
+					},
+					"responses": map[string]interface{}{"200": map[string]interface{}{"description": "删除成功"}},
+				},
+			},
+			"/api/projects/{id}/promote-attack-chain/{conversationId}": map[string]interface{}{
+				"post": map[string]interface{}{
+					"tags": []string{"项目管理"}, "summary": "将对话攻击链沉淀到项目事实图", "operationId": "promoteAttackChainToProject",
+					"parameters": []map[string]interface{}{
+						{"name": "id", "in": "path", "required": true, "schema": map[string]interface{}{"type": "string"}},
+						{"name": "conversationId", "in": "path", "required": true, "schema": map[string]interface{}{"type": "string"}},
+					},
+					"responses": map[string]interface{}{"200": map[string]interface{}{"description": "沉淀结果（facts/edges/graph）"}},
 				},
 			},
 			"/api/vulnerabilities": map[string]interface{}{
