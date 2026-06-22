@@ -1309,7 +1309,10 @@ func (h *AgentHandler) createProgressCallback(runCtx context.Context, cancelRun 
 
 		// 保存过程详情到数据库（排除 response/done；response 正文已在 messages 表）
 		// response_start/response_delta 已聚合为 planning，不落逐条。
+		// [Eino] agent 心跳 progress 仅用于实时进度标题，不落库以免时间线刷屏。
+		skipEinoAgentHeartbeat := eventType == "progress" && strings.HasPrefix(strings.TrimSpace(message), "[Eino] ")
 		if assistantMessageID != "" &&
+			!skipEinoAgentHeartbeat &&
 			eventType != "response" &&
 			eventType != "done" &&
 			eventType != "response_start" &&
