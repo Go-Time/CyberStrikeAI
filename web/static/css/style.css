@@ -3964,9 +3964,10 @@ header {
     background: var(--bg-tertiary);
 }
 
+/* 迭代轮次：暖琥珀色条 + 极浅底，与紫（推理）/蓝（工具）区分但不抢视觉 */
 .timeline-item-iteration {
-    border-left-color: var(--accent-color);
-    background: rgba(0, 102, 255, 0.06);
+    border-left-color: #c4a574;
+    background: rgba(180, 140, 90, 0.045);
 }
 
 /*
@@ -3974,13 +3975,18 @@ header {
  * 但不再在此处整卡铺色 + !important，否则会盖住工具调用/结果/思考的类型色。
  * 主编排 vs 子代理的区分由「迭代轮次」上的 timeline-eino-scope-* 负责。
  */
-.timeline-item-iteration.timeline-eino-scope-main {
-    border-left-color: #3949ab !important;
-    background: rgba(57, 73, 171, 0.1) !important;
+.timeline-item.timeline-item-iteration.timeline-eino-scope-main {
+    border-left-color: #b8956a;
+    background: rgba(184, 149, 106, 0.05);
 }
-.timeline-item-iteration.timeline-eino-scope-sub {
-    border-left-color: #00695c !important;
-    background: rgba(0, 105, 92, 0.09) !important;
+.timeline-item.timeline-item-iteration.timeline-eino-scope-sub {
+    border-left-color: #a6896c;
+    background: rgba(166, 137, 108, 0.045);
+}
+
+.timeline-item-iteration .timeline-item-title {
+    color: var(--text-secondary);
+    font-weight: 500;
 }
 
 /* 模型内部思考：弱化灰紫，避免与「助手输出」抢视觉 */
@@ -15846,7 +15852,12 @@ tr.mcp-stats-tool-row[data-tool-name]:focus-visible {
     overflow-y: visible;
 }
 .webshell-ai-process-block .webshell-ai-timeline-iteration {
-    border-left-color: var(--accent-color);
+    border-left-color: #c4a574;
+    background: rgba(180, 140, 90, 0.04);
+}
+.webshell-ai-process-block .webshell-ai-timeline-iteration .webshell-ai-timeline-title {
+    color: var(--text-secondary);
+    font-weight: 500;
 }
 .webshell-ai-process-block .webshell-ai-timeline-thinking {
     border-left-color: #9c27b0;

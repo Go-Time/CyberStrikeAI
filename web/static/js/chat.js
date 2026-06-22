@@ -2252,10 +2252,22 @@ async function syncAssistantReasoningContentFromServer(backendMessageId, domAssi
 window.normalizeReasoningContentForDisplay = normalizeReasoningContentForDisplay;
 window.setMessageReasoningContent = setMessageReasoningContent;
 window.getMessageReasoningContent = getMessageReasoningContent;
+window.filterNoiseProcessDetails = filterNoiseProcessDetails;
 window.mergeMessageReasoningContentIntoProcessDetails = mergeMessageReasoningContentIntoProcessDetails;
 window.syncAssistantReasoningContentFromServer = syncAssistantReasoningContentFromServer;
 
 /** 相邻且类型/正文/data 完全一致的过程详情只保留一条（与后端去重一致，避免时间线叠多条相同块） */
+function isEinoAgentHeartbeatProgress(detail) {
+    if (!detail || detail.eventType !== 'progress') return false;
+    const msg = String(detail.message != null ? detail.message : '').trim();
+    return /^\[Eino\]\s+\S/.test(msg);
+}
+
+function filterNoiseProcessDetails(details) {
+    if (!Array.isArray(details)) return details;
+    return details.filter(function (d) { return !isEinoAgentHeartbeatProgress(d); });
+}
+
 function dedupeConsecutiveProcessDetailRows(details) {
     if (!Array.isArray(details) || details.length < 2) {
         return details;
@@ -2394,6 +2406,7 @@ function renderProcessDetails(messageId, processDetails) {
         detailsContainer.dataset.loaded = '1';
     }
     processDetails = mergeMessageReasoningContentIntoProcessDetails(processDetails, reasoningFromMessage);
+    processDetails = filterNoiseProcessDetails(processDetails);
     processDetails = dedupeConsecutiveProcessDetailRows(processDetails);
     if (typeof window.coalesceProcessDetailsToolPairs === 'function') {
         processDetails = window.coalesceProcessDetailsToolPairs(processDetails);

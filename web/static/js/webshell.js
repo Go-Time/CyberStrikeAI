@@ -1989,6 +1989,10 @@ function buildWebshellTimelineItemFromDetail(detail) {
 // 渲染「执行过程及调用工具」折叠块（默认折叠，刷新后加载历史时保留并可展开）
 function renderWebshellProcessDetailsBlock(processDetails, defaultCollapsed) {
     if (!processDetails || processDetails.length === 0) return null;
+    if (typeof window.filterNoiseProcessDetails === 'function') {
+        processDetails = window.filterNoiseProcessDetails(processDetails);
+    }
+    if (!processDetails.length) return null;
     if (typeof window.coalesceProcessDetailsToolPairs === 'function') {
         processDetails = window.coalesceProcessDetailsToolPairs(processDetails);
     }
