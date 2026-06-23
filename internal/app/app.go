@@ -25,6 +25,7 @@ import (
 	"cyberstrike-ai/internal/logger"
 	"cyberstrike-ai/internal/mcp"
 	"cyberstrike-ai/internal/mcp/builtin"
+	"cyberstrike-ai/internal/monitor"
 	"cyberstrike-ai/internal/robot"
 	"cyberstrike-ai/internal/security"
 	"cyberstrike-ai/internal/skillpackage"
@@ -98,6 +99,10 @@ func New(cfg *config.Config, log *logger.Logger, configPath string) (*App, error
 	audit.RegisterConversationCreateHook(auditSvc)
 	auditSvc.PurgeExpired()
 	audit.StartRetentionLoop(auditSvc, log.Logger)
+
+	monitorRetention := monitor.NewService(db, cfg, log.Logger)
+	monitorRetention.PurgeExpired()
+	monitor.StartRetentionLoop(monitorRetention, log.Logger)
 
 	// 创建MCP服务器（带数据库持久化）
 	mcpServer := mcp.NewServerWithStorage(log.Logger, db)
@@ -326,6 +331,7 @@ func New(cfg *config.Config, log *logger.Logger, configPath string) (*App, error
 	}
 	monitorHandler := handler.NewMonitorHandler(mcpServer, executor, db, log.Logger)
 	monitorHandler.SetAudit(auditSvc)
+	monitorHandler.SetMonitorRetention(monitorRetention)
 	monitorHandler.SetExternalMCPManager(externalMCPMgr) // 设置外部MCP管理器，以便获取外部MCP执行记录
 	notificationHandler := handler.NewNotificationHandler(db, agentHandler, log.Logger)
 	groupHandler := handler.NewGroupHandler(db, log.Logger)
