@@ -377,9 +377,9 @@
                             </div>
                             <!-- 第一行：核心 KPI（关键指标置顶 + 副标徽章承载次级信息） -->
                             <div class="dashboard-kpi-row" id="dashboard-cards">
-                                <div class="dashboard-kpi-card" role="button" tabindex="0" onclick="switchPage('tasks')" onkeydown="if(event.key==='Enter'||event.key===' ') { event.preventDefault(); switchPage('tasks'); }" data-i18n="dashboard.clickToViewTasks" data-i18n-attr="title" title="点击查看任务管理">
+                                <div class="dashboard-kpi-card" role="button" tabindex="0" onclick="switchPage('chat')" onkeydown="if(event.key==='Enter'||event.key===' ') { event.preventDefault(); switchPage('chat'); }" data-i18n="dashboard.clickToViewChat" data-i18n-attr="title" title="点击查看对话">
                                     <div class="dashboard-kpi-head">
-                                        <div class="dashboard-kpi-label" data-i18n="dashboard.runningTasks">运行中任务</div>
+                                        <div class="dashboard-kpi-label" data-i18n="dashboard.runningConversations">运行中对话</div>
                                         <span class="dashboard-kpi-icon dashboard-kpi-icon-tasks" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4"/><path d="M12 18v4"/><path d="M4.93 4.93l2.83 2.83"/><path d="M16.24 16.24l2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="M4.93 19.07l2.83-2.83"/><path d="M16.24 7.76l2.83-2.83"/></svg></span>
                                     </div>
                                     <div class="dashboard-kpi-value" id="dashboard-running-tasks">-</div>

@@ -1,4 +1,4 @@
-// 仪表盘页面：拉取运行中任务、漏洞统计、批量任务、工具与 Skills 统计并渲染。
+// 仪表盘页面：拉取运行中对话、漏洞统计、批量任务、工具与 Skills 统计并渲染。
 //
 // 工程基础设施：
 //   - dashboardState 集中保存运行时状态（in-flight controller / 自动轮询 timer / 上次更新时间 /
@@ -150,36 +150,24 @@ async function refreshDashboard() {
         // 如果在 await 期间 controller 已被 abort，说明又有新刷新启动了，丢弃本次结果
         if (signal && signal.aborted) return;
 
-        // 运行中任务：Agent 循环任务 + 批量队列「执行中」数量统一统计，避免顶部 KPI 与运行概览不一致
+        // 运行中对话：仅统计 Agent 循环任务；批量队列见右侧「批量任务队列」
         let agentRunningCount = null;
         if (tasksRes && Array.isArray(tasksRes.tasks)) {
             agentRunningCount = tasksRes.tasks.length;
         }
         let batchRunningCount = 0;
-        let batchPendingCount = 0;
         if (batchRes && Array.isArray(batchRes.queues)) {
             batchRes.queues.forEach(q => {
                 const s = (q.status || '').toLowerCase();
                 if (s === 'running') batchRunningCount++;
-                else if (s === 'pending' || s === 'paused') batchPendingCount++;
             });
         }
-        const totalRunning = (agentRunningCount || 0) + batchRunningCount;
+        const runningConversations = agentRunningCount !== null ? agentRunningCount : 0;
         if (runningEl) {
-            if (agentRunningCount !== null) {
-                runningEl.textContent = String(totalRunning);
-            } else if (batchRes && Array.isArray(batchRes.queues)) {
-                runningEl.textContent = String(batchRunningCount);
-            } else {
-                runningEl.textContent = '-';
-            }
+            runningEl.textContent = agentRunningCount !== null ? String(agentRunningCount) : '-';
         }
-        // KPI 副标：N 待执行 / 全部空闲
-        if (batchPendingCount > 0) {
-            setKpiSubBadge('dashboard-kpi-tasks-sub-text',
-                dt('dashboard.pendingCountLabel', { count: batchPendingCount }, batchPendingCount + ' 待执行'),
-                'pending');
-        } else if (totalRunning === 0) {
+        // KPI 副标：全部空闲 / 正在执行
+        if (runningConversations === 0) {
             setKpiSubBadge('dashboard-kpi-tasks-sub-text', dt('dashboard.allIdle', null, '系统空闲'), 'idle');
         } else {
             setKpiSubBadge('dashboard-kpi-tasks-sub-text', dt('dashboard.executingNow', null, '正在执行'), 'running');
@@ -405,7 +393,7 @@ async function refreshDashboard() {
         var toolsConfiguredCount = (toolsConfigRes && typeof toolsConfigRes.total === 'number')
             ? toolsConfigRes.total : 0;
         updateSmartCTA({
-            totalRunning: totalRunning,
+            totalRunning: runningConversations + batchRunningCount,
             totalVulns: (vulnRes && typeof vulnRes.total === 'number') ? vulnRes.total : 0,
             totalCalls: toolsTotalCalls,
             toolsConfigured: toolsConfiguredCount,
@@ -421,7 +409,7 @@ async function refreshDashboard() {
             failedTools: toolsFailedCount,
             toolsConfigured: toolsConfiguredCount,
             totalVulns: (vulnRes && typeof vulnRes.total === 'number') ? vulnRes.total : 0,
-            totalRunning: totalRunning
+            totalRunning: runningConversations + batchRunningCount
         });
 
         // 更新「上次更新」时间
