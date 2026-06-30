@@ -6441,13 +6441,44 @@ let conversationsPagination = {
     page: 1,
     pageSize: getConversationsPageSize(),
     total: 0,
-    lastRenderedPage: null,
-    /** 用户翻页方向：-1 上一页，1 下一页；0 表示后台刷新等非导航加载 */
-    skipEmptyDirection: 0,
-    _emptySkipCount: 0,
+    visibleCount: 0,
 };
 let conversationsSearchQuery = '';
-const CONVERSATIONS_EMPTY_PAGE_SKIP_MAX = 20;
+let conversationsPaginationEventsBound = false;
+
+function getConversationsTotalPages() {
+    const { total, pageSize } = conversationsPagination;
+    return Math.max(1, Math.ceil((total || 0) / pageSize) || 1);
+}
+
+function clampConversationsPageToTotal() {
+    const totalPages = getConversationsTotalPages();
+    if (conversationsPagination.page > totalPages) {
+        conversationsPagination.page = totalPages;
+        return true;
+    }
+    if (conversationsPagination.page < 1) {
+        conversationsPagination.page = 1;
+        return true;
+    }
+    return false;
+}
+
+function initConversationsPaginationEvents() {
+    if (conversationsPaginationEventsBound) return;
+    const el = document.getElementById('conversations-pagination');
+    if (!el) return;
+    conversationsPaginationEventsBound = true;
+    el.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-conv-page]');
+        if (!btn || btn.disabled) return;
+        e.preventDefault();
+        const page = parseInt(btn.getAttribute('data-conv-page'), 10);
+        if (Number.isFinite(page)) {
+            goConversationsPage(page);
+        }
+    });
+}
 
 function parseListTotalValue(raw, itemsLength) {
     if (typeof raw === 'number' && Number.isFinite(raw) && raw >= 0) return raw;
@@ -6484,6 +6515,9 @@ function parseConversationsListResponse(data) {
 
 async function resolveConversationsListTotal(params, parsed, pageSize, offset) {
     const serverTotal = parsed.total;
+    if (!parsed.isLegacyArray && typeof serverTotal === 'number' && Number.isFinite(serverTotal) && serverTotal >= 0) {
+        return serverTotal;
+    }
     if (!parsed.isLegacyArray && serverTotal > offset + parsed.items.length) {
         return serverTotal;
     }
@@ -6536,59 +6570,24 @@ function getConversationListEmptyHtml() {
     return '<div class="conversations-list-empty" data-i18n="chat.noHistoryConversations"></div>';
 }
 
-function clearConversationsPageNavigationState() {
-    conversationsPagination.skipEmptyDirection = 0;
-    conversationsPagination._emptySkipCount = 0;
-}
-
-/** 服务端分页 + 客户端分组过滤可能导致当前页无可见项；仅在用户主动翻页时沿翻页方向跳过空页 */
-function trySkipEmptyFilteredConversationsPage(searchQuery, parsed, pageSize, visibleCount, hasSearchQuery) {
-    if (hasSearchQuery || visibleCount > 0 || !parsed.items.length) {
-        return false;
-    }
-    const dir = conversationsPagination.skipEmptyDirection;
-    if (!dir) {
-        return false;
-    }
-    const totalPages = Math.max(1, Math.ceil(conversationsPagination.total / pageSize));
-    const skipCount = conversationsPagination._emptySkipCount || 0;
-    if (skipCount >= CONVERSATIONS_EMPTY_PAGE_SKIP_MAX) {
-        return false;
-    }
-    if (dir < 0 && conversationsPagination.page > 1) {
-        conversationsPagination.page -= 1;
-        conversationsPagination._emptySkipCount = skipCount + 1;
-        loadConversationsWithGroups(searchQuery);
-        return true;
-    }
-    if (dir > 0 && conversationsPagination.page < totalPages) {
-        conversationsPagination.page += 1;
-        conversationsPagination._emptySkipCount = skipCount + 1;
-        loadConversationsWithGroups(searchQuery);
-        return true;
-    }
-    return false;
-}
-
 function renderConversationsPagination(visibleCount) {
     const el = document.getElementById('conversations-pagination');
     if (!el) return;
     const { page, pageSize, total } = conversationsPagination;
-    conversationsPagination.lastRenderedPage = page;
-    clearConversationsPageNavigationState();
-    const count = typeof visibleCount === 'number' ? visibleCount : (conversationsPagination.visibleCount || 0);
-    conversationsPagination.visibleCount = count;
+    if (typeof visibleCount === 'number') {
+        conversationsPagination.visibleCount = visibleCount;
+    }
 
-    if (count === 0 || total === 0) {
+    if (!total) {
         el.innerHTML = '';
         el.hidden = true;
         return;
     }
 
-    const totalPages = Math.max(1, Math.ceil(total / pageSize) || 1);
+    const totalPages = getConversationsTotalPages();
     const navDisabled = totalPages <= 1;
     el.hidden = false;
-    const start = (page - 1) * pageSize + 1;
+    const start = total === 0 ? 0 : (page - 1) * pageSize + 1;
     const end = Math.min(page * pageSize, total);
     const tFn = typeof window.t === 'function' ? window.t.bind(window) : null;
     const infoText = tFn
@@ -6600,13 +6599,15 @@ function renderConversationsPagination(visibleCount) {
     const perPageLabel = tFn ? tFn('chat.paginationPerPage') : 'Per page';
     const prevLabel = tFn ? tFn('chat.paginationPrev') : 'Prev';
     const nextLabel = tFn ? tFn('chat.paginationNext') : 'Next';
+    const prevPage = page - 1;
+    const nextPage = page + 1;
     el.innerHTML = `
         <div class="sidebar-list-pagination-inner sidebar-list-pagination-inner--compact">
             <span class="pagination-info">${escapeHtml(infoText)}</span>
             <div class="pagination-controls">
-                <button type="button" class="btn-icon-pagination" onclick="goConversationsPage(${page - 1})" ${page <= 1 || navDisabled ? 'disabled' : ''} title="${escapeHtml(prevLabel)}" aria-label="${escapeHtml(prevLabel)}">‹</button>
+                <button type="button" class="btn-icon-pagination" data-conv-page="${prevPage}" ${page <= 1 || navDisabled ? 'disabled' : ''} title="${escapeHtml(prevLabel)}" aria-label="${escapeHtml(prevLabel)}">‹</button>
                 <span class="pagination-page">${escapeHtml(pageText)}</span>
-                <button type="button" class="btn-icon-pagination" onclick="goConversationsPage(${page + 1})" ${page >= totalPages || navDisabled ? 'disabled' : ''} title="${escapeHtml(nextLabel)}" aria-label="${escapeHtml(nextLabel)}">›</button>
+                <button type="button" class="btn-icon-pagination" data-conv-page="${nextPage}" ${page >= totalPages || navDisabled ? 'disabled' : ''} title="${escapeHtml(nextLabel)}" aria-label="${escapeHtml(nextLabel)}">›</button>
             </div>
             <label class="pagination-page-size">
                 ${escapeHtml(perPageLabel)}
@@ -6620,17 +6621,10 @@ function renderConversationsPagination(visibleCount) {
 }
 
 function goConversationsPage(page) {
-    const totalPages = Math.max(1, Math.ceil((conversationsPagination.total || 0) / conversationsPagination.pageSize) || 1);
-    const next = Math.min(Math.max(1, page), totalPages);
-    const lastRendered = conversationsPagination.lastRenderedPage;
-    if (lastRendered != null && next === lastRendered) {
-        return;
-    }
-    const fromPage = typeof lastRendered === 'number' ? lastRendered : conversationsPagination.page;
-    conversationsPagination.skipEmptyDirection = next > fromPage ? 1 : (next < fromPage ? -1 : 0);
-    conversationsPagination._emptySkipCount = 0;
+    const next = Math.min(Math.max(1, page), getConversationsTotalPages());
+    const scrollToTop = next !== conversationsPagination.page;
     conversationsPagination.page = next;
-    loadConversationsWithGroups(conversationsSearchQuery);
+    loadConversationsWithGroups(conversationsSearchQuery, { refreshMeta: false, scrollToTop });
 }
 
 function changeConversationsPageSize() {
@@ -6740,7 +6734,9 @@ async function loadGroups() {
 }
 
 // 加载对话列表（修改为支持分组和置顶）
-async function loadConversationsWithGroups(searchQuery = '') {
+async function loadConversationsWithGroups(searchQuery = '', options = {}) {
+    const refreshMeta = options.refreshMeta !== false;
+    const scrollToTop = options.scrollToTop === true;
     const loadSeq = ++conversationsListLoadSeq;
     try {
         conversationsSearchQuery = searchQuery || '';
@@ -6762,11 +6758,12 @@ async function loadConversationsWithGroups(searchQuery = '') {
         }
         updateConversationSidebarFilterUI();
         const url = `/api/conversations?${convParams}`;
-        const [,, response] = await Promise.all([
-            loadGroups(),
-            loadConversationGroupMapping(),
-            apiFetch(url),
-        ]);
+        const fetchTasks = [apiFetch(url)];
+        if (refreshMeta) {
+            fetchTasks.unshift(loadGroups(), loadConversationGroupMapping());
+        }
+        const results = await Promise.all(fetchTasks);
+        const response = results[results.length - 1];
         if (loadSeq !== conversationsListLoadSeq) return;
 
         const listContainer = document.getElementById('conversations-list');
@@ -6793,6 +6790,12 @@ async function loadConversationsWithGroups(searchQuery = '') {
         if (loadSeq !== conversationsListLoadSeq) return;
         const parsed = parseConversationsListResponse(data);
         conversationsPagination.total = await resolveConversationsListTotal(convParams, parsed, pageSize, offset);
+        if (loadSeq !== conversationsListLoadSeq) return;
+
+        if (clampConversationsPageToTotal()) {
+            loadConversationsWithGroups(searchQuery, options);
+            return;
+        }
 
         // 双重保险：后端或并发情况下若出现重复ID，前端按ID去重
         const uniqueConversations = [];
@@ -6929,10 +6932,6 @@ async function loadConversationsWithGroups(searchQuery = '') {
         const visibleCount = pinnedConvs.length + Object.values(groups).reduce((n, arr) => n + (arr ? arr.length : 0), 0);
         conversationsPagination.visibleCount = visibleCount;
 
-        if (trySkipEmptyFilteredConversationsPage(searchQuery, parsed, pageSize, visibleCount, hasSearchQuery)) {
-            return;
-        }
-
         if (fragment.children.length === 0) {
             listContainer.innerHTML = emptyStateHtml;
             if (typeof window.applyTranslations === 'function') window.applyTranslations(listContainer);
@@ -6945,12 +6944,11 @@ async function loadConversationsWithGroups(searchQuery = '') {
         updateActiveConversation();
         renderConversationsPagination(visibleCount);
         
-        // 恢复滚动位置
+        // 翻页时回到列表顶部；后台刷新保留滚动位置
         if (sidebarContent) {
-            // 使用 requestAnimationFrame 确保 DOM 已经更新
             requestAnimationFrame(() => {
                 if (loadSeq === conversationsListLoadSeq) {
-                    sidebarContent.scrollTop = savedScrollTop;
+                    sidebarContent.scrollTop = scrollToTop ? 0 : savedScrollTop;
                 }
             });
         }
@@ -9403,6 +9401,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (window.i18nReady) await window.i18nReady;
     updateConversationSortMenuUI();
     initConversationProjectCustomSelect();
+    initConversationsPaginationEvents();
     await refreshConversationProjectFilter();
     await loadGroups();
     await loadConversationsWithGroups();
