@@ -2633,6 +2633,7 @@
     "conversationName": "Conversation name",
     "project": "Project",
     "noProject": "No project",
+    "unknownProject": "Unknown project",
     "filterByProject": "Filter by project",
     "lastTime": "Last activity",
     "action": "Action",

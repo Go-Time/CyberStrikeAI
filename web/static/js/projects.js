@@ -179,8 +179,34 @@ function rememberProjectsInNameMap(list) {
     });
 }
 
-const PROJECT_PICKER_SEARCH_LIMIT = 50;
-const PROJECT_PICKER_INITIAL_LIMIT = 20;
+/** 与后端 projectListSearchPattern 对齐：name / description / id 子串匹配（忽略大小写） */
+function matchProjectSearchQuery(project, query) {
+    const q = String(query || '').trim().toLowerCase();
+    if (!q) return true;
+    const name = String(project.name || '').toLowerCase();
+    const desc = String(project.description || '').toLowerCase();
+    const id = String(project.id || '').toLowerCase();
+    return name.includes(q) || desc.includes(q) || id.includes(q);
+}
+
+function sortProjectsForPicker(projects) {
+    return [...projects].sort((a, b) => {
+        const ap = a.pinned ? 1 : 0;
+        const bp = b.pinned ? 1 : 0;
+        if (bp !== ap) return bp - ap;
+        const au = a.updated_at || a.updatedAt || '';
+        const bu = b.updated_at || b.updatedAt || '';
+        return String(bu).localeCompare(String(au));
+    });
+}
+
+/** 从已加载列表中筛选活跃项目（对话选择器 / 项目筛选下拉） */
+function filterActiveProjectsLocal(projects, query) {
+    const list = (projects || []).filter((p) => p && p.id && p.status !== 'archived');
+    const q = String(query || '').trim();
+    const filtered = q ? list.filter((p) => matchProjectSearchQuery(p, q)) : list;
+    return sortProjectsForPicker(filtered);
+}
 
 async function searchActiveProjects(query, opts = {}) {
     const params = new URLSearchParams();
@@ -341,11 +367,16 @@ async function ensureProjectsLoaded(force) {
     return _projectsFetchPromise;
 }
 
+function isProjectsCacheReady() {
+    return _projectsListReady;
+}
+
 function prefetchProjectsForChat() {
     const id = (resolveChatProjectSelection() || '').trim();
     if (id && !projectNameById[id]) {
         fetchProjectSummary(id).catch(() => {});
     }
+    ensureProjectsLoaded().catch(() => {});
 }
 
 /** 新对话时默认不绑定项目；用户需主动选择后才写入共享黑板 */
@@ -2108,7 +2139,7 @@ async function normalizeStaleChatProjectSelection() {
     }
 }
 
-const PROJECT_PICKER_DEBOUNCE_MS = 300;
+const PROJECT_PICKER_DEBOUNCE_MS = 100;
 const projectPickerPanelState = {
     chat: { seq: 0, timer: null },
     webshell: { seq: 0, timer: null },
@@ -2174,23 +2205,25 @@ async function renderProjectPickerPanel(panelKey, config) {
         );
     };
 
-    list.innerHTML = '';
-    renderPinned();
-    const loadingEl = appendChatProjectPanelMessage(
-        list,
-        'chat-project-panel-loading',
-        pickerMessage(t, 'common.loading', '加载中…')
-    );
+    const needsFetch = !isProjectsCacheReady();
+    let loadingEl = null;
+    if (needsFetch) {
+        list.innerHTML = '';
+        renderPinned();
+        loadingEl = appendChatProjectPanelMessage(
+            list,
+            'chat-project-panel-loading',
+            pickerMessage(t, 'common.loading', '加载中…')
+        );
+    }
 
     try {
-        const parsed = await searchActiveProjects(query, {
-            limit: query ? PROJECT_PICKER_SEARCH_LIMIT : PROJECT_PICKER_INITIAL_LIMIT,
-        });
+        const all = await ensureProjectsLoaded();
         if (seq !== state.seq) return;
 
         list.innerHTML = '';
         renderPinned();
-        const projects = (parsed.items || []).filter((p) => p && p.id && p.status !== 'archived');
+        const projects = filterActiveProjectsLocal(all, query);
         projects.forEach((p) => {
             appendChatProjectPanelItem(list, p, selectedId, config.onSelect, t);
         });
@@ -2200,12 +2233,6 @@ async function renderProjectPickerPanel(panelKey, config) {
                 list,
                 'chat-project-panel-empty',
                 pickerMessage(t, 'chat.filterProjectSearchEmpty', '没有匹配的项目')
-            );
-        } else if (!query && parsed.total > projects.length) {
-            appendChatProjectPanelMessage(
-                list,
-                'chat-project-panel-hint',
-                pickerMessage(t, 'chat.filterProjectSearchMore', '更多项目请输入关键字搜索')
             );
         }
     } catch (e) {
@@ -2218,7 +2245,7 @@ async function renderProjectPickerPanel(panelKey, config) {
             pickerMessage(t, 'chat.filterProjectSearchFailed', '加载项目失败，请重试')
         );
     } finally {
-        if (loadingEl.parentNode) loadingEl.remove();
+        if (loadingEl && loadingEl.parentNode) loadingEl.remove();
     }
 }
 
@@ -2496,6 +2523,8 @@ window.toggleProjectFactGraphConnectMode = toggleProjectFactGraphConnectMode;
 window.rebuildProjectNameMap = rebuildProjectNameMap;
 window.rememberProjectsInNameMap = rememberProjectsInNameMap;
 window.searchActiveProjects = searchActiveProjects;
+window.filterActiveProjectsLocal = filterActiveProjectsLocal;
 window.fetchProjectSummary = fetchProjectSummary;
 window.projectNameById = projectNameById;
 window.ensureProjectsLoaded = ensureProjectsLoaded;
+window.isProjectsCacheReady = isProjectsCacheReady;

@@ -6166,9 +6166,6 @@ const CONVERSATION_PROJECT_FILTER_NONE = '__none__';
 const CONVERSATION_PROJECT_FILTER_SELECT_ID = 'conversation-project-filter';
 const CONVERSATION_PROJECT_FILTER_CARET = '<svg class="conversation-project-filter-caret" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const BATCH_PROJECT_FILTER_SELECT_ID = 'batch-project-filter';
-const PROJECT_FILTER_REMOTE_SEARCH_LIMIT = 50;
-const PROJECT_FILTER_REMOTE_INITIAL_LIMIT = 20;
-const PROJECT_FILTER_REMOTE_DEBOUNCE_MS = 300;
 const projectFilterCustomSelectRegistry = {};
 let projectFilterCustomSelectDocBound = false;
 
@@ -6185,11 +6182,11 @@ function closeProjectFilterCustomSelect(selectId) {
     if (!reg || !reg.wrapper) return;
     reg.wrapper.classList.remove('open');
     if (reg.trigger) reg.trigger.setAttribute('aria-expanded', 'false');
-    if (reg.remoteSearchTimer) {
-        clearTimeout(reg.remoteSearchTimer);
-        reg.remoteSearchTimer = null;
+    if (reg.filterSearchTimer) {
+        clearTimeout(reg.filterSearchTimer);
+        reg.filterSearchTimer = null;
     }
-    reg.remoteSearchSeq = (reg.remoteSearchSeq || 0) + 1;
+    reg.filterSearchSeq = (reg.filterSearchSeq || 0) + 1;
     if (reg.searchInput) reg.searchInput.value = '';
 }
 
@@ -6219,10 +6216,10 @@ function ensureProjectFilterSearchUi(reg) {
     optionsList.className = 'conversation-project-filter-options';
     dropdown.appendChild(optionsList);
     reg.optionsList = optionsList;
-    reg.remoteSearchSeq = 0;
-    reg.remoteSearchTimer = null;
+    reg.filterSearchSeq = 0;
+    reg.filterSearchTimer = null;
 
-    searchInput.addEventListener('input', () => scheduleProjectFilterRemoteSearch(reg.select.id));
+    searchInput.addEventListener('input', () => loadProjectFilterLocalOptions(reg.select.id));
     searchInput.addEventListener('click', (e) => e.stopPropagation());
     searchInput.addEventListener('keydown', (e) => {
         e.stopPropagation();
@@ -6283,60 +6280,39 @@ function ensureNativeProjectFilterOption(select, projectId, label) {
     select.appendChild(opt);
 }
 
-function scheduleProjectFilterRemoteSearch(selectId) {
-    const reg = projectFilterCustomSelectRegistry[selectId];
-    if (!reg) return;
-    if (reg.remoteSearchTimer) clearTimeout(reg.remoteSearchTimer);
-    reg.remoteSearchTimer = setTimeout(() => {
-        reg.remoteSearchTimer = null;
-        loadProjectFilterRemoteOptions(selectId);
-    }, PROJECT_FILTER_REMOTE_DEBOUNCE_MS);
-}
-
-async function queryProjectFilterRemote(query, limit) {
-    if (typeof window.searchActiveProjects === 'function') {
-        return window.searchActiveProjects(query, { limit });
-    }
-    const params = new URLSearchParams({ status: 'active', limit: String(limit) });
-    const q = String(query || '').trim();
-    if (q) params.set('search', q);
-    const res = await apiFetch(`/api/projects?${params}`);
-    if (!res.ok) throw new Error('search failed');
-    const data = await res.json();
-    const items = data.projects || data.items || (Array.isArray(data) ? data : []);
-    if (typeof window.rememberProjectsInNameMap === 'function') {
-        window.rememberProjectsInNameMap(items);
-    }
-    return {
-        items,
-        total: typeof data.total === 'number' ? data.total : items.length,
-    };
-}
-
-async function loadProjectFilterRemoteOptions(selectId) {
+async function loadProjectFilterLocalOptions(selectId) {
     const reg = projectFilterCustomSelectRegistry[selectId];
     if (!reg || !reg.optionsList) return;
     const query = (reg.searchInput?.value || '').trim();
-    const seq = ++reg.remoteSearchSeq;
+    const seq = ++reg.filterSearchSeq;
 
-    renderProjectFilterPinnedOptions(reg);
-    const loadingEl = appendProjectFilterStatusMessage(
-        reg.optionsList,
-        'conversation-project-filter-status',
-        projectFilterT('chat.filterProjectSearchLoading', '搜索中…')
-    );
+    const needsFetch = typeof window.isProjectsCacheReady === 'function' && !window.isProjectsCacheReady();
+    let loadingEl = null;
+    if (needsFetch) {
+        renderProjectFilterPinnedOptions(reg);
+        loadingEl = appendProjectFilterStatusMessage(
+            reg.optionsList,
+            'conversation-project-filter-status',
+            projectFilterT('common.loading', '加载中…')
+        );
+    }
 
     try {
-        const parsed = await queryProjectFilterRemote(
-            query,
-            query ? PROJECT_FILTER_REMOTE_SEARCH_LIMIT : PROJECT_FILTER_REMOTE_INITIAL_LIMIT
-        );
-        if (seq !== reg.remoteSearchSeq) return;
+        const ensureLoaded = typeof window.ensureProjectsLoaded === 'function'
+            ? window.ensureProjectsLoaded
+            : null;
+        const filterLocal = typeof window.filterActiveProjectsLocal === 'function'
+            ? window.filterActiveProjectsLocal
+            : null;
+        if (!ensureLoaded || !filterLocal) throw new Error('projects cache unavailable');
+
+        const all = await ensureLoaded();
+        if (seq !== reg.filterSearchSeq) return;
 
         renderProjectFilterPinnedOptions(reg);
         const selected = reg.select.value;
         const pinnedValues = new Set(['', CONVERSATION_PROJECT_FILTER_NONE]);
-        const projects = (parsed.items || []).filter((p) => p && p.id && p.status !== 'archived');
+        const projects = filterLocal(all, query);
         projects.forEach((p) => {
             if (pinnedValues.has(p.id)) return;
             reg.optionsList.appendChild(
@@ -6350,21 +6326,9 @@ async function loadProjectFilterRemoteOptions(selectId) {
                 'conversation-project-filter-empty',
                 projectFilterT('chat.filterProjectSearchEmpty', '没有匹配的项目')
             );
-        } else if (!query && parsed.total > projects.length) {
-            appendProjectFilterStatusMessage(
-                reg.optionsList,
-                'conversation-project-filter-hint',
-                projectFilterT('chat.filterProjectSearchMore', '更多项目请输入关键字搜索')
-            );
-        } else if (!query && projects.length === 0) {
-            appendProjectFilterStatusMessage(
-                reg.optionsList,
-                'conversation-project-filter-hint',
-                projectFilterT('chat.filterProjectSearchHint', '输入关键字搜索项目')
-            );
         }
     } catch (e) {
-        if (seq !== reg.remoteSearchSeq) return;
+        if (seq !== reg.filterSearchSeq) return;
         renderProjectFilterPinnedOptions(reg);
         appendProjectFilterStatusMessage(
             reg.optionsList,
@@ -6438,7 +6402,7 @@ function initProjectFilterCustomSelect(selectId) {
             const reg = projectFilterCustomSelectRegistry[selectId];
             if (reg?.searchInput) {
                 reg.searchInput.value = '';
-                loadProjectFilterRemoteOptions(selectId);
+                loadProjectFilterLocalOptions(selectId);
                 requestAnimationFrame(() => reg.searchInput.focus());
             }
         }
@@ -8425,7 +8389,25 @@ function getConversationProjectLabel(conv) {
     if (!pid) {
         return typeof window.t === 'function' ? window.t('batchManageModal.noProject') : '无项目';
     }
-    return (window.projectNameById && window.projectNameById[pid]) || pid;
+    const name = window.projectNameById && window.projectNameById[pid];
+    if (name) return name;
+    return typeof window.t === 'function' ? window.t('batchManageModal.unknownProject') : '未知项目';
+}
+
+async function prefetchProjectNamesForConversations(conversations) {
+    const missing = new Set();
+    for (const conv of conversations || []) {
+        const pid = getConversationProjectId(conv);
+        if (pid && !(window.projectNameById && window.projectNameById[pid])) {
+            missing.add(pid);
+        }
+    }
+    if (!missing.size) return;
+    const fetchSummary = typeof window.fetchProjectSummary === 'function'
+        ? window.fetchProjectSummary
+        : null;
+    if (!fetchSummary) return;
+    await Promise.all([...missing].map((id) => fetchSummary(id).catch(() => null)));
 }
 
 async function refreshBatchProjectFilter() {
@@ -8479,6 +8461,7 @@ async function showBatchManageModal() {
     try {
         initProjectFilterCustomSelect(BATCH_PROJECT_FILTER_SELECT_ID);
         allConversationsForBatch = await fetchAllConversations('');
+        await prefetchProjectNamesForConversations(allConversationsForBatch);
         await refreshBatchProjectFilter();
         const sidebarFilter = getConversationProjectFilter();
         const batchSel = document.getElementById('batch-project-filter');
